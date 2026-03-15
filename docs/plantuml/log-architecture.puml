@@ -1,0 +1,43 @@
+@startuml
+package Applications {
+  rectangle MachineA {
+    package frontend_systems as machineA_frontend_systems {
+      component frontend as machineA_frontend
+    }
+    package backend_systems as machineA_backend_systems {
+      component backend as machineA_backend
+      component otelcollector as machineA_backend_otelcollector
+      file log_volume as machineA_backend_logs
+      machineA_backend -down-> machineA_backend_logs : write
+      machineA_backend_otelcollector -down-> machineA_backend_logs : read
+    }
+  }
+  rectangle MachineB {
+    package frontend_systems as machineB_frontend_systems {
+      component frontend as machineB_frontend
+    }
+    package backend_systems as machineB_backend_systems {
+      component backend as machineB_backend
+      component otelcollector as machineB_backend_otelcollector
+      file log_volume as machineB_backend_logs
+      machineB_backend -down-> machineB_backend_logs : write
+      machineB_backend_otelcollector -down-> machineB_backend_logs : read
+    }
+  }
+}
+
+package ObservabilityPlatform {
+  component grafana_loki as op_grafana_loki
+  component grafana as op_grafana
+  database mysql as op_mysql
+  op_grafana --> op_grafana_loki : http
+  op_grafana --> op_mysql : tcp
+}
+
+actor some_user as u
+
+machineA_backend_otelcollector -up-> op_grafana_loki : http
+machineB_backend_otelcollector -up-> op_grafana_loki : http
+
+u --> op_grafana : browser
+@enduml

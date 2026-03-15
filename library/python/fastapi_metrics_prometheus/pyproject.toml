@@ -1,0 +1,78 @@
+[tool.poetry]
+name = "fastapi-metrics-prometheus"
+version = "0.1.0"
+description = "A helper package for fastapi metrics through prometheus client."
+authors = []
+readme = "README.md"
+
+[[tool.poetry.source]]
+name = "pypi-group"
+url = "http://192.168.23.123:8081/repository/pypi-group/simple"
+priority = "primary"
+
+[[tool.poetry.source]]
+name = "pypi-internal"
+url = "http://192.168.23.123:8081/repository/pypi-internal/"
+priority = "explicit"
+
+[tool.poetry.dependencies]
+python = "~=3.11"
+prometheus-client = "~=0.21.0"
+
+[tool.poetry.group.dev.dependencies]
+poethepoet = "~=0.29.0"
+pytest = "~=8.3.3"
+pytest-cov = "~=5.0.0"
+starlette = "~=0.38.6"
+httpx = "~=0.27.2"
+flake8 = "^7.1.1"
+
+[tool.poe.tasks.install-sync]
+interpreter = ["bash", "powershell"]
+shell = """
+poetry lock --no-update
+poetry install --sync --only main,dev
+"""
+
+[tool.poe.tasks.set-pypi-internal-credential-plaintext]
+interpreter = ["bash", "powershell"]
+shell = """
+poetry config keyring.enabled false
+poetry config http-basic.pypi-internal devops
+"""
+
+[tool.poe.tasks.publish]
+control.script = "sys:stdout.write(sys.platform)"
+
+    [[tool.poe.tasks.publish.switch]]
+    case = "linux"
+    interpreter = "bash"
+    shell = """
+    . ./.env
+    rm -rf ./dist
+    poetry publish --build --no-interaction --repository=pypi-internal
+    """
+
+    [[tool.poe.tasks.publish.switch]]
+    case = "win32"
+    interpreter = "powershell"
+    shell = """
+    . .\\.env.ps1
+    Remove-Item -Recurse -Force .\\dist
+    poetry publish --build --no-interaction --repository=pypi-internal
+    """
+
+[tool.poe.tasks.test-coverage]
+interpreter = ["bash", "powershell"]
+shell = """
+pytest --cov=. --cov-report=term-missing --cov-fail-under=70 --cov-report html
+"""
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-rA"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

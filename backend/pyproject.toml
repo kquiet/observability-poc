@@ -1,0 +1,74 @@
+[tool.poetry]
+name = "backend"
+version = "0.1.0"
+description = ""
+authors = []
+readme = "README.md"
+package-mode = false
+
+[[tool.poetry.source]]
+name = "pypi-group"
+url = "http://192.168.23.123:8081/repository/pypi-group/simple"
+priority = "explicit"
+
+[tool.poetry.dependencies]
+python = "~=3.11"
+uvicorn = "~=0.30.6"
+fastapi = "~=0.114.2"
+prometheus-client = "~=0.21.0"
+python-dotenv = "~=1.0.1"
+sqlalchemy = {extras = ["aiomysql"], version = "~=2.0.35"}
+cryptography = "~=43.0.1"
+opentelemetry-distro = "==0.48b0"
+opentelemetry-exporter-otlp = "==1.27.0"
+setuptools = "~=79.0.1"
+pyyaml = "~=6.0.2"
+fastapi-metrics-prometheus = { path = "../library/python/fastapi_metrics_prometheus" }
+
+[tool.poetry.group.dev.dependencies]
+poethepoet = "~0.36.0"
+poetry-plugin-export = "~1.9.0"
+
+[tool.poe.tasks.install-sync]
+interpreter = ["bash", "powershell"]
+shell = """
+poetry lock --no-update
+poetry install --sync --only main,dev
+opentelemetry-bootstrap -a install
+"""
+
+[tool.poe.tasks.generate-requirements]
+interpreter = ["bash", "powershell"]
+shell = """
+poetry export --output requirements.txt --without-hashes --without-urls
+"""
+
+[tool.poe.tasks.local-run]
+interpreter = ["bash", "powershell"]
+shell = """
+opentelemetry-instrument python main.py
+"""
+
+[tool.poe.tasks.fire-requests]
+interpreter = ["bash"]
+shell = """
+while true; do
+  for i in {1..5}; do
+    curl http://localhost:8080/ping
+    sleep 1
+  done
+  for i in {1..2}; do
+    curl http://localhost:8080/slowping
+  done
+  for i in {1..2}; do
+    curl http://localhost:8080/beats/123/
+    sleep 1
+  done
+  curl http://localhost:8080/beats/777/
+  sleep 1
+done
+"""
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

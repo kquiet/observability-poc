@@ -1,0 +1,188 @@
+# when using docker compose command against this docker-compose file,
+# please make sure .env exists with following environment variables:
+# LDAP_USERNAME
+# LDAP_PASSWORD
+services:
+  mariadb:
+    image: docker.io/library/mariadb:11.6.2
+    environment:
+      MARIADB_ROOT_PASSWORD: "changeafterinstall"
+      MARIADB_DATABASE: poc
+      MARIADB_USER: poc
+      MARIADB_PASSWORD: "poc"
+    volumes:
+      - o11y-poc-mariadb-data:/var/lib/mysql:Z
+      - ./mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+    healthcheck:
+      test: mariadb-admin ping -h 127.0.0.1 -u poc --password=poc
+      start_period: 5s
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      - devops-lan
+  adminer:
+    image: docker.io/library/adminer:5.3.0-standalone
+    ports:
+      - "6082:8080"
+    restart: always
+    networks:
+      - devops-lan
+  grafana:
+    image: docker.io/grafana/grafana-oss:11.3.2
+    environment:
+      GF_SERVER_ROOT_URL: "http://127.0.0.1:3000"
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: "changeafterinstall"
+      GF_DATABASE_TYPE: mysql
+      GF_DATABASE_HOST: "mariadb:3306"
+      GF_DATABASE_NAME: grafana
+      GF_DATABASE_USER: grafana
+      GF_DATABASE_PASSWORD: "changeafterinstall"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_AUTH_LDAP_ENABLED: "true"
+      GF_AUTH_LDAP_SKIP_ORG_ROLE_SYNC: "false"
+      GF_AUTH_LDAP_CONFIG_FILE: "/etc/grafana/ldap.toml"
+      GF_LDAP_USERNAME: "${LDAP_USERNAME}"
+      GF_LDAP_PASSWORD: "${LDAP_PASSWORD}"
+    volumes:
+      - ./grafana/ldap.toml:/etc/grafana/ldap.toml
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    restart: always
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks:
+      - devops-lan
+  mimir:
+    image: docker.io/grafana/mimir:2.13.1
+    volumes:
+      - ./grafana-mimir/mimir-config.yml:/etc/mimir.yaml
+      - o11y-poc-mimir-data:/tmp/mimir
+    command:
+      - --config.file=/etc/mimir.yaml
+    # ports:
+    #   - "9009:9009"
+    restart: always
+    networks:
+      - devops-lan
+  prometheus:
+    image: quay.io/prometheus/prometheus:v2.55.1
+    volumes:
+      - ./prometheus/prometheus-config.yml:/etc/prometheus/prometheus.yml
+      - o11y-poc-prometheus-data:/prometheus
+    command: 
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      - --storage.tsdb.retention.time=15d
+      - --enable-feature=exemplar-storage
+      - --web.enable-remote-write-receiver
+    ports:
+      - "9090:9090"
+    restart: always
+    networks:
+      - devops-lan
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: [ "--config.file=/etc/tempo.yaml" ]
+    user: "root"
+    volumes:
+      - ./grafana-tempo/tempo-config.yml:/etc/tempo.yaml
+      - o11y-poc-tempo-data:/tmp/tempo
+    # ports:
+    #   - "3200:3200"  # tempo
+    #   - "4317:4317"  # otlp grpc
+    #   - "4318:4318"  # otlp http
+    restart: always
+    networks:
+      - devops-lan
+  loki:
+    image: docker.io/grafana/loki:3.3.1
+    command: [ "--config.file=/etc/loki.yaml" ]
+    user: "root"
+    volumes:
+      - ./grafana-loki/loki-config.yml:/etc/loki.yaml
+      - o11y-poc-loki-data:/tmp/loki
+    # ports:
+    #   - "3100:3100"  # loki http
+    #   - "9095:9095"  # grpc
+    restart: always
+    networks:
+      - devops-lan
+  otelcollector:
+    image: docker.io/otel/opentelemetry-collector-contrib:0.115.1
+    command: [ "--config=/conf/otel-collector-config.yaml" ]
+    environment:
+      MY_NODE_NAME: "local-pc"
+      MY_NAMESPACE: "devops"
+    volumes:
+      - ./logs:/logs
+      - ./otel-collector/otel-collector-config.yaml:/conf/otel-collector-config.yaml
+    # ports:
+    #   - "14317:4317"
+    #   - "14318:4318"
+    restart: always
+    networks:
+      - devops-lan
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    environment:
+      APP_PORT: "8080"
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_RESOURCE_ATTRIBUTES: "component=backend,service.name=poc-backend,namespace=devops,node.name=local-pc"
+      OTEL_TRACES_EXPORTER: "otlp"
+      OTEL_METRICS_EXPORTER: "none"
+      OTEL_PYTHON_LOG_CORRELATION: "true"
+      OTEL_PYTHON_LOG_LEVEL: "info"
+      DATABASE_URL: "mysql+aiomysql://poc:poc@mariadb:3306/poc"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "otelcollector:4317"
+    volumes:
+      - ./logs:/app/logs
+    # ports:
+    #   - "6081:8080"
+    restart: always
+    networks:
+      - devops-lan
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "6080:80"
+    restart: always
+    networks:
+      - devops-lan
+  api-call-simulator:
+    image: curlimages/curl:latest
+    command: >
+      sh -c "
+      while true;
+      do
+        curl -sS http://frontend/backend/beats/123/; echo;
+        sleep 1
+        curl -sS http://frontend/backend/beats/777/; echo;
+        sleep 1
+        curl -sS http://frontend/backend/ping; echo;
+        sleep 1
+        curl -sS http://frontend/backend/slowping; echo;
+        sleep 1
+      done"
+    restart: always
+    networks:
+      - devops-lan
+networks:
+  devops-lan:
+    driver: bridge
+volumes:
+  o11y-poc-mariadb-data:
+  o11y-poc-mimir-data:
+  o11y-poc-prometheus-data:
+  o11y-poc-tempo-data:
+  o11y-poc-loki-data:

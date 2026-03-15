@@ -1,0 +1,30 @@
+.DS_Store
+out
+**/.vscode/.ropeproject/**
+.vscode-test
+__pycache__
+**/.mypy_cache/**
+coverage/
+**/.vscode-test/**
+**/.vscode test/**
+**/.vscode-smoke/**
+**/.venv*/
+bin/**
+obj/**
+**/logs/
+.pytest_cache
+tmp/**
+.python-version
+.vs/
+**/dist/**
+**/*.code-workspace
+**/.env
+# translation files
+*.xlf
+package.nls.*.json
+l10n/
+
+helm-charts/project-base/charts/*.tgz
+
+scripts/gitlab-runner/**/.runner_system_id
+.codegpt

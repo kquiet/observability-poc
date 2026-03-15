@@ -1,0 +1,60 @@
+apiVersion: 1
+
+datasources:
+  - name: poc-loki
+    type: loki
+    uid: a73d55c9-cac8-4431-9ed3-adf84a213dac
+    orgId: 1
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    jsonData:
+      httpHeaderName1: "X-Scope-OrgID"
+      derivedFields:
+        - name: trace_id
+          matcherRegex: 'trace_id=(\w+)'
+          url: "${__value.raw}"
+          datasourceUid: a37dc47b-d2d2-422e-bc5e-7cbdd72f96f0
+    secureJsonData:
+      httpHeaderValue1: "devops"
+
+  - name: poc-oa-prometheus-data-on-mimir
+    type: prometheus
+    uid: f3fff8f4-39e5-4b1c-921b-f357db0f4f8a
+    orgId: 1
+    access: proxy
+    url: http://mimir:9009/prometheus
+    isDefault: false
+    jsonData:
+      httpMethod: POST
+
+  - name: poc-tempo
+    type: tempo
+    uid: a37dc47b-d2d2-422e-bc5e-7cbdd72f96f0
+    orgId: 1
+    access: proxy
+    url: http://tempo:3200
+    isDefault: false
+    jsonData:
+      httpHeaderName1: "x-scope-orgid"
+      search:
+        filters:
+          - id: "4bc5c50c"
+            operator: "="
+            scope: resource
+            tag: service.name
+            value: []
+      serviceMap:
+        datasourceUid: f3fff8f4-39e5-4b1c-921b-f357db0f4f8a
+      tracesToLogsV2:
+        customQuery: false
+        datasourceUid: a73d55c9-cac8-4431-9ed3-adf84a213dac
+        filterByTraceID: true
+        query: ""
+        spanEndTimeShift: "1m"
+        spanStartTimeShift: "-1m"
+        tags: []
+      tracesToMetrics:
+        tags: []
+    secureJsonData:
+      httpHeaderValue1: "devops"

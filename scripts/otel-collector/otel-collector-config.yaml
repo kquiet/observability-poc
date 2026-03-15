@@ -1,0 +1,107 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+  filelog:
+    max_log_size: 3MiB
+    include:
+    - /logs/app.log
+    - /logs/app.log.*
+    include_file_name: false
+    include_file_path: true
+    multiline:
+      line_start_pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z'
+    operators:
+    - id: parse-all-attributes
+      type: regex_parser
+      regex: '^(?P<asctime>[^ ]+) (?P<levelname>[^ ]+) \[(?P<logger>[^\]]+)\] \[(?P<filename>[^:]+):(?P<lineno>[^\]]+)\] \[trace_id=(?P<traceid>[^ ]+) span_id=(?P<spanid>[^ ]+) trace_sampled=(?P<trace_sampled>[^\]]+)\] - (?P<message>(?s).+)$'
+      timestamp:
+        parse_from: attributes.asctime
+        layout_type: strptime
+        layout: '%Y-%m-%dT%H:%M:%S.%fZ'
+      severity:
+        parse_from: attributes.levelname
+    - id: extract-trace
+      type: trace_parser
+      trace_id:
+        parse_from: attributes.traceid
+      span_id:
+        parse_from: attributes.spanid
+    - id: remove-asctime
+      type: remove
+      field: attributes.asctime
+    - id: remove-levelname
+      type: remove
+      field: attributes.levelname
+    - id: remove-traceid
+      type: remove
+      field: attributes.traceid
+    - id: remove-spanid
+      type: remove
+      field: attributes.spanid
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  batch:
+    timeout: 200ms
+  attributes/log:
+    actions:
+      - action: insert
+        key: component
+        value: backend
+      - action: insert
+        key: service_name
+        value: poc-backend
+      - action: insert
+        key: node_name
+        value: ${MY_NODE_NAME}
+      - action: insert
+        key: namespace
+        value: ${MY_NAMESPACE}
+      - action: insert
+        key: loki.attribute.labels
+        value: logger, service_name, node_name, namespace, component
+      - action: insert
+        key: loki.format
+        value: raw
+
+exporters:
+  otlp/trace:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+    headers:
+      x-scope-orgid: devops
+    retry_on_failure:
+      enabled: true
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    headers:
+      "X-Scope-OrgID": devops
+    default_labels_enabled:
+      exporter: false
+  prometheus:
+    endpoint: "0.0.0.0:9464"
+
+service:
+  telemetry:
+    logs:
+      level: "debug"
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/trace]
+    logs:
+      receivers: [filelog]
+      processors: [memory_limiter, attributes/log, batch]
+      exporters: [loki]
+    metrics:
+      receivers: [otlp]
+      exporters: [prometheus]

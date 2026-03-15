@@ -1,0 +1,38 @@
+stages:
+  - build
+
+.job-tags:
+  tags:
+    - all
+    - hpc
+
+.job-image:
+  image:
+    name: docker-group.repo.svc.internal/python:3.11.10-bookworm
+
+.job-condition:
+  rules:
+    # be cautious: Merged results pipelines and merge request pipelines do not have access to protected variables.
+    - if: '$CI_COMMIT_REF_NAME == "dev" && $CI_MERGE_REQUEST_IID == null'
+      changes:
+        - ".gitlab-ci.yml"
+        - "library/python/fastapi_metrics_prometheus/**/*.py"
+        - "library/python/fastapi_metrics_prometheus/pyproject.toml"
+        - "library/python/fastapi_metrics_prometheus/poetry.lock"
+
+build_fastapi_metrics_prometheus:
+  stage: build
+  extends:
+    - .job-condition
+    - .job-tags
+    - .job-image
+  script:
+    - pip install --index-url https://repo.svc.internal/repository/pypi-group/simple --trusted-host repo.svc.internal poetry==1.8.3
+    - cd library/python/fastapi_metrics_prometheus
+    - python -m venv .venv
+    - poetry install
+    - poetry run flake8 --max-line-length 100 fastapi_metrics_prometheus/ tests/
+    - poetry run poe test-coverage
+  artifacts:
+    paths:
+      - library/python/fastapi_metrics_prometheus/htmlcov/

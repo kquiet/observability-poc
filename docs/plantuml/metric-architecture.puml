@@ -1,0 +1,47 @@
+@startuml
+package Applications {
+  rectangle MachineA {
+    component otelcollector as machineA_otelcollector
+    package frontend_systems as machineA_frontend_systems {
+      component frontend as machineA_frontend
+      machineA_frontend -> machineA_otelcollector : http
+    }
+    package backend_systems as machineA_backend_systems {
+      component backend as machineA_backend
+    }
+  }
+  rectangle MachineB {
+    component otelcollector as machineB_otelcollector
+    package frontend_systems as machineB_frontend_systems {
+      component frontend as machineB_frontend
+      machineB_frontend -> machineB_otelcollector : http
+    }
+    package backend_systems as machineB_backend_systems {
+      component backend as machineB_backend
+    }
+  }
+}
+
+package ObservabilityPlatform {
+  component prometheus as op_prometheus
+  database grafana_mimir as op_grafana_mimir
+  component grafana as op_grafana
+  database mysql as op_mysql
+
+  op_grafana -down-> op_prometheus : http
+  op_grafana -right-> op_mysql : tcp
+  op_prometheus -> op_grafana_mimir: http
+}
+
+op_prometheus --> machineA_backend : http
+
+op_prometheus --> machineB_backend : http
+
+op_prometheus --> machineA_otelcollector : http
+
+op_prometheus --> machineB_otelcollector : http
+
+actor some_user as u
+
+u --> op_grafana : browser
+@enduml

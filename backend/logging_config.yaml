@@ -1,0 +1,33 @@
+version: 1
+
+formatters:
+  simple:
+    format: '%(asctime)s.%(msecs)03dZ %(levelname)s [%(name)s] [%(filename)s:%(lineno)d] - %(message)s'
+    datefmt: '%Y-%m-%dT%H:%M:%S'
+  simple_with_trace_context:
+    format: '%(asctime)s.%(msecs)03dZ %(levelname)s [%(name)s] [%(filename)s:%(lineno)d] [trace_id=%(otelTraceID)s span_id=%(otelSpanID)s trace_sampled=%(otelTraceSampled)s] - %(message)s'
+    datefmt: '%Y-%m-%dT%H:%M:%S'
+
+handlers:
+  console_stdout:
+    class: logging.StreamHandler
+    formatter: simple
+    stream: ext://sys.stdout
+  console_stderr:
+    class: logging.StreamHandler
+    formatter: simple
+    stream: ext://sys.stderr
+  rotating_file_handler:
+    class: logging.handlers.RotatingFileHandler
+    formatter: simple_with_trace_context
+    filename: logs/app.log
+    maxBytes: 1048576  # 1MB
+    backupCount: 3
+    encoding: utf-8
+
+root:
+  level: DEBUG
+  handlers:
+  - rotating_file_handler
+  - console_stdout
+  - console_stderr

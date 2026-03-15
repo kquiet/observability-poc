@@ -1,0 +1,43 @@
+@startuml
+package Applications {
+  rectangle MachineA {
+    component otelcollector as machineA_otelcollector
+    package frontend_systems as machineA_frontend_systems {
+      component frontend as machineA_frontend
+    }
+    machineA_frontend -up-> machineA_otelcollector : http
+    package backend_systems as machineA_backend_systems {
+      component backend as machineA_backend
+    }
+    machineA_backend -up-> machineA_otelcollector : http
+  }
+  rectangle MachineB {
+    component otelcollector as machineB_otelcollector
+    package frontend_systems as machineB_frontend_systems {
+      component frontend as machineB_frontend
+    }
+    machineB_frontend -up-> machineB_otelcollector : http
+    package backend_systems as machineB_backend_systems {
+      component backend as machineB_backend
+    }
+    machineB_backend -up-> machineB_otelcollector : http
+  }
+}
+
+package ObservabilityPlatform {
+  component grafana_tempo as op_grafana_tempo
+  component grafana as op_grafana
+  database mysql as op_mysql
+
+  op_grafana -down-> op_grafana_tempo : http
+  op_grafana -right-> op_mysql : tcp
+}
+
+machineA_otelcollector -up-> op_grafana_tempo : http
+
+machineB_otelcollector -up-> op_grafana_tempo : http
+
+actor some_user as u
+
+u --> op_grafana : browser
+@enduml
